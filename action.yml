@@ -1,0 +1,120 @@
+name: 'aws-hosted-runners'
+description: 'Github Action to update workflow labels, directing jobs to self-hosted runners'
+author: 'sdarwin'
+
+inputs:
+  self_hosted_runners_override:
+    description: "Should self-hosted runners always be used? Enter a text string 'true' or 'false'"
+    required: false
+  self_hosted_runners_url:
+    description: "Webpage which returns the directive if self-hosted runners ought to be used."
+    default: "https://gha.cpp.al/switch"
+    required: false
+  owner_list:
+    description: "Space separated list of repository owners that will use self-hosted runners."
+    default: "boostorg"
+    required: false
+  debug:
+    description: "Enable debug logging. Enter a text string: 'true' or 'false'"
+    default: 'false'
+    required: false
+outputs:
+  labelmatrix:
+    description: "A dictionary of values to update the runs-on variable in a workflow."
+    value: ${{ steps.computelabels.outputs.labelmatrix }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Compute labels
+      id: computelabels
+      shell: bash
+      run: |
+        set -e
+        # if [ "${{ inputs.debug }}" == "true" ]; then
+        #    set -x
+        # fi
+        if [[ ! "  ${{ inputs.owner_list }} " =~ .*\ ${{ github.repository_owner }}\ .* ]]; then
+            self_hosted_runners="false"
+            echo "The repo organization or owner doesn't match the owner_list setting. Disabling self-hosted runners."
+        elif [ "${{ inputs.self_hosted_runners_override }}" == "true" ]; then
+            self_hosted_runners="true"
+            echo "self_hosted_runners_override is true"
+        elif [ "${{ inputs.self_hosted_runners_override }}" == "false" ]; then
+            self_hosted_runners="false"
+            echo "self_hosted_runners_override is false"
+        else
+            checkweb=$(curl --connect-timeout 3 ${{ inputs.self_hosted_runners_url }}) || true
+            if [ "$checkweb" == "true" ]; then
+                self_hosted_runners="true"
+                echo "From the Web setting, self-hosted runners are enabled."
+            elif [ "$checkweb" == "false" ]; then
+                self_hosted_runners="false"
+                echo "From the Web setting, self-hosted runners are disabled."
+            else
+                # the default
+                self_hosted_runners="false"
+                echo "Did not connect to the web switch. The default value for self-hosted runners is set to false."
+            fi
+        fi
+
+        supported_images_linux="ubuntu-latest"
+        # for i in {14..44}
+        for i in $(seq 18 2 44)
+        do
+          new_image="ubuntu-${i}.04"
+          supported_images_linux="${supported_images_linux} ${new_image}"
+          new_image="ubuntu-${i}.10"
+          supported_images_linux="${supported_images_linux} ${new_image}"
+        done
+
+        supported_images_windows="windows-latest"
+        for i in $(seq 19 44)
+        do
+          new_image="windows-20${i}"
+          supported_images_windows="${supported_images_windows} ${new_image}"
+        done
+
+        supported_images_macos="macos-latest"
+        for i in $(seq 11 44)
+        do
+          new_image="macos-${i}"
+          supported_images_macos="${supported_images_macos} ${new_image}"
+        done
+
+        labelmatrix="{ "
+        if [ ${self_hosted_runners} == "true" ]; then
+          for image in ${supported_images_linux}; do 
+            labelmatrix="$labelmatrix \"${image}\": [ \"self-hosted\", \"linux\", \"x64\", \"${image}-aws\" ], "
+            labelmatrix="$labelmatrix \"${image}-no-aws\": [ \"${image}\" ], "
+          done
+          for image in ${supported_images_windows}; do 
+            labelmatrix="$labelmatrix \"${image}\": [ \"self-hosted\", \"windows\", \"x64\", \"${image}-aws\" ], "
+            labelmatrix="$labelmatrix \"${image}-no-aws\": [ \"${image}\" ], "
+          done
+          # Note: macos is not using "self-hosted" currently:
+          for image in ${supported_images_macos}; do
+            labelmatrix="$labelmatrix \"${image}\": [ \"${image}\" ], "
+            labelmatrix="$labelmatrix \"${image}-no-aws\": [ \"${image}\" ], "
+          done
+        else
+          for image in ${supported_images_linux}; do
+            labelmatrix="$labelmatrix \"${image}\": [ \"${image}\" ], "
+            labelmatrix="$labelmatrix \"${image}-no-aws\": [ \"${image}\" ], "
+          done
+          for image in ${supported_images_windows}; do
+            labelmatrix="$labelmatrix \"${image}\": [ \"${image}\" ], "
+            labelmatrix="$labelmatrix \"${image}-no-aws\": [ \"${image}\" ], "
+          done
+          for image in ${supported_images_macos}; do
+            labelmatrix="$labelmatrix \"${image}\": [ \"${image}\" ], "
+            labelmatrix="$labelmatrix \"${image}-no-aws\": [ \"${image}\" ], "
+          done
+        fi
+        labelmatrix=$( echo "$labelmatrix" | sed 's/,\s*$//' )
+        labelmatrix="$labelmatrix }"
+        if [ "${{ inputs.debug }}" == "true" ]; then
+            echo "The labelmatrix is $labelmatrix"
+        fi
+        echo "labelmatrix=$labelmatrix" >> $GITHUB_OUTPUT
+
