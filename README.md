@@ -11,7 +11,7 @@ If self-hosted runners are disabled, the existing label such as `ubuntu-22.04` w
 
 These modifications should be made in the workflow file:  
 
-- In the matrix section, quote the operating system labels. That is 'ubuntu-latest' or 'ubuntu-22.04'. Don't leave them as plain text ubuntu-latest.
+- In the matrix section, quote the operating system labels. That is 'ubuntu-latest' or 'ubuntu-22.04'. Don't leave them as plain text ubuntu-latest. (The need for this change may depend on whether you have sections of json in the workflow or it is completely yaml format. Yaml may not require any modification).
 
 - Add a `runner-selection` job:
 
@@ -28,6 +28,7 @@ jobs:
         # with:
         #   self_hosted_runners_override: 'true'
         #   self_hosted_runners_url: 'https://example.com/switch'
+        #   owner_list: example.com
         #   debug: 'true'
 ```
 
@@ -50,8 +51,12 @@ Usually not required.
 | debug | false | 'false' | Enable debugging |
 
 
-## Instructions
+## Fork Instructions
 
-See https://github.com/cppalliance/githubactions for instructions.  
+The original implementation of this Action was designed for a specific organization. All others are welcome to fork or clone the aws-hosted-runners repository and set up their own infrastructure.  
+- In action.yml change the default value of `self_hosted_runners_url` so it points to your website instead.  
+- In action.yml change the default value of `owner_list` so that it only contains your organization.  
+- When modifying workflow files specify your information in the steps: `uses: _your_organization_/aws-hosted-runners@v1.0.0`  
+- Configure Terraform to label self-hosted runners as `[ self-hosted, linux, x64, ubuntu-latest-aws ]` which has no label overlap with `ubuntu-latest`.  
+- It is convenient to install a central admin server: https://github.com/cppalliance/github-runner-admin  
 
-This implementation is primarily aimed at boost.org and cppalliance.org users. However others are welcome to clone the repository and set up their own infrastructure. The main difference if using this elsewhere is to change the default value of `self_hosted_runners_url` so it points to your website instead.  
